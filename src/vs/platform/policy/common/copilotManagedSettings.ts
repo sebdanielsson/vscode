@@ -138,9 +138,9 @@ export const MANAGED_SETTINGS_FILE_NAME = 'managed-settings.json';
 
 /**
  * Top-level keys in the managed-settings schema whose values are opaque structured
- * blobs (objects/arrays) rather than hierarchical sub-settings. These are
- * extracted before flattening and carried as canonical JSON strings in the bag,
- * matching the format native MDM delivers.
+ * objects rather than hierarchical sub-settings. These are extracted before
+ * flattening and carried as canonical JSON strings in the bag, matching the
+ * format native MDM delivers.
  */
 const STRUCTURED_MANAGED_SETTINGS_KEYS: ReadonlySet<string> = new Set([
 	COPILOT_ENABLED_PLUGINS_KEY,

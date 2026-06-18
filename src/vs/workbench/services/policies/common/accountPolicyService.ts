@@ -203,9 +203,9 @@ export class AccountPolicyService extends AbstractPolicyService implements IPoli
 		const declaredManagedSettings = collectManagedSettingsDefinitions(this.policyDefinitions);
 		const managedSettingsData = projectManagedSettings(
 			{
-				...fileManagedData,
-				...accountPolicyData?.managedSettings,
-				...managedPolicyData,
+				...(fileManagedData ?? {}),
+				...(accountPolicyData?.managedSettings ?? {}),
+				...(managedPolicyData ?? {}),
 			},
 			declaredManagedSettings,
 			msg => this.logService.warn(`[AccountPolicy] ${msg}`)

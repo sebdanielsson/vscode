@@ -11,7 +11,7 @@ import { localize } from '../../../../nls.js';
 import { RawContextKey } from '../../../../platform/contextkey/common/contextkey.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { ILogService } from '../../../../platform/log/common/log.js';
-import { ICopilotManagedSettingsService, collectManagedSettingsDefinitions, projectManagedSettings } from '../../../../platform/policy/common/copilotManagedSettings.js';
+import { ICopilotManagedSettingsService, IFileManagedSettingsService, collectManagedSettingsDefinitions, projectManagedSettings } from '../../../../platform/policy/common/copilotManagedSettings.js';
 import { AbstractPolicyService, getRestrictedPolicyValue, IPolicyService, PolicyDefinition, PolicyValue } from '../../../../platform/policy/common/policy.js';
 import { IDefaultAccountService } from '../../../../platform/defaultAccount/common/defaultAccount.js';
 
@@ -73,17 +73,20 @@ export class AccountPolicyService extends AbstractPolicyService implements IPoli
 	// Read-only — the MultiplexPolicyService owns calling updatePolicyDefinitions.
 	private readonly managedPolicyReader?: IPolicyService;
 	private readonly copilotManagedSettingsService?: ICopilotManagedSettingsService;
+	private readonly fileManagedSettingsService?: IFileManagedSettingsService;
 
 	constructor(
 		@ILogService private readonly logService: ILogService,
 		@IDefaultAccountService private readonly defaultAccountService: IDefaultAccountService,
 		managedPolicyService?: IPolicyService,
 		copilotManagedSettingsService?: ICopilotManagedSettingsService,
+		fileManagedSettingsService?: IFileManagedSettingsService,
 	) {
 		super();
 
 		this.managedPolicyReader = managedPolicyService;
 		this.copilotManagedSettingsService = copilotManagedSettingsService;
+		this.fileManagedSettingsService = fileManagedSettingsService;
 
 		this._updatePolicyDefinitions(this.policyDefinitions);
 		this._register(this.defaultAccountService.onDidChangePolicyData(() => {
@@ -101,6 +104,11 @@ export class AccountPolicyService extends AbstractPolicyService implements IPoli
 		}
 		if (this.copilotManagedSettingsService) {
 			this._register(this.copilotManagedSettingsService.onDidChangeManagedSettings(() => {
+				this._updatePolicyDefinitions(this.policyDefinitions);
+			}));
+		}
+		if (this.fileManagedSettingsService) {
+			this._register(this.fileManagedSettingsService.onDidChangeManagedSettings(() => {
 				this._updatePolicyDefinitions(this.policyDefinitions);
 			}));
 		}
@@ -179,21 +187,26 @@ export class AccountPolicyService extends AbstractPolicyService implements IPoli
 
 	private getPolicyData(managedSettings?: ManagedSettingsData): IPolicyData | undefined {
 		const accountPolicyData = this.defaultAccountService.policyData ?? undefined;
-		const nativeManagedSettings = managedSettings ?? this.copilotManagedSettingsService?.managedSettings;
-		const hasNativeManagedSettings = nativeManagedSettings && Object.keys(nativeManagedSettings).length > 0;
-		if (!accountPolicyData && !hasNativeManagedSettings) {
+		const managedPolicyData = managedSettings ?? this.copilotManagedSettingsService?.managedSettings;
+		const fileManagedData = this.fileManagedSettingsService?.managedSettings;
+		const hasManagedPolicyData = managedPolicyData && Object.keys(managedPolicyData).length > 0;
+		const hasFileManagedData = fileManagedData && Object.keys(fileManagedData).length > 0;
+		if (!accountPolicyData && !hasManagedPolicyData && !hasFileManagedData) {
 			return undefined;
 		}
 
-		// Single authoritative source: server-delivered managed settings win over native MDM.
-		// See `.github/skills/add-policy/github-managed-settings.md` for the precedence rationale.
-		const serverManagedSettings = accountPolicyData?.managedSettings;
-		const hasServerManagedSettings = serverManagedSettings && Object.keys(serverManagedSettings).length > 0;
-		const winningManagedSettings = hasServerManagedSettings ? serverManagedSettings : nativeManagedSettings;
-
+		// Managed settings arrive from three delivery channels:
+		// 1. File-based (`managed-settings.json` on disk) — lowest priority
+		// 2. Server-managed (`/copilot_internal/managed_settings` endpoint)
+		// 3. Native MDM (the Copilot managed-settings service) — highest priority
+		// Merge them in precedence order, then project onto the declared schema.
 		const declaredManagedSettings = collectManagedSettingsDefinitions(this.policyDefinitions);
 		const managedSettingsData = projectManagedSettings(
-			{ ...winningManagedSettings },
+			{
+				...fileManagedData,
+				...accountPolicyData?.managedSettings,
+				...managedPolicyData,
+			},
 			declaredManagedSettings,
 			msg => this.logService.warn(`[AccountPolicy] ${msg}`)
 		);

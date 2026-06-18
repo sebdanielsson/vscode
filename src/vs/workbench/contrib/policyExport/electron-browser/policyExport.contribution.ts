@@ -19,8 +19,19 @@ import { URI } from '../../../../base/common/uri.js';
 import { VSBuffer } from '../../../../base/common/buffer.js';
 import { PolicyCategory, PolicyCategoryData } from '../../../../base/common/policy.js';
 import { ExportedPolicyDataDto } from '../common/policyDto.js';
-import { externalPolicyReferences, IExternalPolicyReference } from '../../../../platform/policy/common/externalPolicyReferences.js';
 import { join } from '../../../../base/common/path.js';
+
+/**
+ * `policyReference`s for settings registered ONLY in another window (e.g. the Agents window,
+ * `vs/sessions`). This export runs in the workbench window and never loads those registrations,
+ * so the references are listed here to keep each policy's `referencedSettings` complete.
+ * Keep in sync with the `policyReference` declared by the setting in its own window.
+ */
+const EXTERNAL_POLICY_REFERENCES: ReadonlyArray<{ readonly policyName: string; readonly settingKey: string }> = [
+	// `sessions.chat.claudeAgent.enabled` (Agents window) references `Claude3PIntegration`,
+	// owned by `github.copilot.chat.claudeAgent.enabled`.
+	{ policyName: 'Claude3PIntegration', settingKey: 'sessions.chat.claudeAgent.enabled' },
+];
 
 interface ExtensionConfigurationPolicyEntry {
 	readonly name: string;
@@ -139,20 +150,7 @@ export class PolicyExportContribution extends Disposable implements IWorkbenchCo
 				}
 
 				// Link policyReference settings and enforce type match (same value is applied verbatim).
-				// References come from two sources: settings registered in THIS (workbench) window,
-				// and the static cross-window manifest for settings registered only in other windows
-				// (e.g. the Agents window) that this export process never loads.
 				const policyReferenceConfigurations = configurationRegistry.getPolicyReferenceConfigurations();
-				const externalReferencesByPolicy = new Map<string, IExternalPolicyReference[]>();
-				for (const reference of externalPolicyReferences) {
-					let references = externalReferencesByPolicy.get(reference.policyName);
-					if (!references) {
-						externalReferencesByPolicy.set(reference.policyName, references = []);
-					}
-					references.push(reference);
-				}
-
-				const linkedExternalReferences = new Set<IExternalPolicyReference>();
 				let linkedReferences = 0;
 				for (const policy of policyData.policies) {
 					const referenceKeys = new Set<string>();
@@ -165,22 +163,16 @@ export class PolicyExportContribution extends Disposable implements IWorkbenchCo
 						referenceKeys.add(referenceKey);
 					}
 
-					for (const reference of externalReferencesByPolicy.get(policy.name) ?? []) {
-						if (reference.type !== policy.type) {
-							throw new Error(`Policy '${policy.name}': external setting '${reference.settingKey}' (type '${reference.type}') declares a 'policyReference' to a policy of type '${policy.type}'. A 'policyReference' must match the owning setting's type.`);
+					// Settings registered only in other windows are invisible to this export; add them statically.
+					for (const reference of EXTERNAL_POLICY_REFERENCES) {
+						if (reference.policyName === policy.name) {
+							referenceKeys.add(reference.settingKey);
 						}
-						referenceKeys.add(reference.settingKey);
-						linkedExternalReferences.add(reference);
 					}
 
 					if (referenceKeys.size > 0) {
 						policy.referencedSettings = [...referenceKeys].sort();
 						linkedReferences += referenceKeys.size;
-					}
-				}
-				for (const reference of externalPolicyReferences) {
-					if (!linkedExternalReferences.has(reference)) {
-						this.log(`External policy reference '${reference.settingKey}' has no owning policy '${reference.policyName}' in the exported catalog; skipping.`);
 					}
 				}
 				this.log(`Linked ${linkedReferences} referenced settings across ${policyData.policies.length} policies.`);

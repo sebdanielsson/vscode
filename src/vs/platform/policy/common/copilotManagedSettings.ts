@@ -125,13 +125,13 @@ export function projectManagedSettings(values: ManagedSettingsData, definitions:
 // --- File-based managed settings ---
 
 /** macOS well-known path for file-based managed settings. */
-export const MANAGED_SETTINGS_MACOS_FILE_PATH = '/Library/Application Support/GitHub Copilot/managed-settings.json';
+export const MANAGED_SETTINGS_MACOS_FILE_PATH = '/Library/Application Support/GitHubCopilot/managed-settings.json';
 
 /** Linux well-known path for file-based managed settings. */
 export const MANAGED_SETTINGS_LINUX_FILE_PATH = '/etc/github-copilot/managed-settings.json';
 
-/** Windows directory name under %ProgramData% for file-based managed settings. */
-export const MANAGED_SETTINGS_WINDOWS_DIR = 'GitHub Copilot';
+/** Windows directory name under %ProgramFiles% for file-based managed settings. */
+export const MANAGED_SETTINGS_WINDOWS_DIR = 'GitHubCopilot';
 
 /** Managed settings file name. */
 export const MANAGED_SETTINGS_FILE_NAME = 'managed-settings.json';
@@ -174,6 +174,14 @@ export function normalizeManagedSettings(parsed: Record<string, unknown>, onWarn
 	const rest: Record<string, unknown> = {};
 	for (const key of Object.keys(parsed)) {
 		const value = parsed[key];
+
+		// strictKnownMarketplaces is an array, not an object — JSON-stringify it
+		// directly so downstream `projectManagedSettings` can parse it back.
+		if (key === COPILOT_STRICT_MARKETPLACES_KEY && Array.isArray(value)) {
+			result[key] = JSON.stringify(value);
+			continue;
+		}
+
 		if (!STRUCTURED_MANAGED_SETTINGS_KEYS.has(key) || !isObject(value)) {
 			rest[key] = value;
 			continue;

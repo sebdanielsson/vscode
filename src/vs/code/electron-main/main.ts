@@ -245,9 +245,9 @@ class CodeMain {
 		// File-based managed settings
 		let fileManagedSettingsPath: string | undefined;
 		if (isWindows) {
-			const programData = process.env.ProgramData;
-			if (programData) {
-				fileManagedSettingsPath = join(programData, MANAGED_SETTINGS_WINDOWS_DIR, MANAGED_SETTINGS_FILE_NAME);
+			const programFiles = process.env['ProgramFiles'];
+			if (programFiles) {
+				fileManagedSettingsPath = join(programFiles, MANAGED_SETTINGS_WINDOWS_DIR, MANAGED_SETTINGS_FILE_NAME);
 			}
 		} else if (isMacintosh) {
 			fileManagedSettingsPath = MANAGED_SETTINGS_MACOS_FILE_PATH;

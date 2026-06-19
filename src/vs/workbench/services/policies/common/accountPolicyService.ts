@@ -185,27 +185,29 @@ export class AccountPolicyService extends AbstractPolicyService implements IPoli
 		return this.copilotManagedSettingsService.updatePolicyDefinitions(policyDefinitions);
 	}
 
-	private getPolicyData(managedSettings?: ManagedSettingsData): IPolicyData | undefined {
+	private getPolicyData(mdmManagedSettings?: ManagedSettingsData): IPolicyData | undefined {
 		const accountPolicyData = this.defaultAccountService.policyData ?? undefined;
-		const managedPolicyData = managedSettings ?? this.copilotManagedSettingsService?.managedSettings;
-		const fileManagedData = this.fileManagedSettingsService?.managedSettings;
-		const hasManagedPolicyData = managedPolicyData && Object.keys(managedPolicyData).length > 0;
-		const hasFileManagedData = fileManagedData && Object.keys(fileManagedData).length > 0;
-		if (!accountPolicyData && !hasManagedPolicyData && !hasFileManagedData) {
+
+		// Managed settings arrive from three delivery channels.
+		// Precedence (highest wins): Server > Native MDM > File.
+		const fileBased = this.fileManagedSettingsService?.managedSettings;
+		const nativeMdm = mdmManagedSettings ?? this.copilotManagedSettingsService?.managedSettings;
+		const serverDelivered = accountPolicyData?.managedSettings;
+
+		const hasFile = fileBased !== undefined && Object.keys(fileBased).length > 0;
+		const hasMdm = nativeMdm !== undefined && Object.keys(nativeMdm).length > 0;
+		const hasServer = serverDelivered !== undefined && Object.keys(serverDelivered).length > 0;
+
+		if (!accountPolicyData && !hasMdm && !hasFile) {
 			return undefined;
 		}
 
-		// Managed settings arrive from three delivery channels:
-		// 1. File-based (`managed-settings.json` on disk) — lowest priority
-		// 2. Server-managed (`/copilot_internal/managed_settings` endpoint)
-		// 3. Native MDM (the Copilot managed-settings service) — highest priority
-		// Merge them in precedence order, then project onto the declared schema.
 		const declaredManagedSettings = collectManagedSettingsDefinitions(this.policyDefinitions);
 		const managedSettingsData = projectManagedSettings(
 			{
-				...(fileManagedData ?? {}),
-				...(accountPolicyData?.managedSettings ?? {}),
-				...(managedPolicyData ?? {}),
+				...(hasFile ? fileBased : {}),
+				...(hasMdm ? nativeMdm : {}),
+				...(hasServer ? serverDelivered : {}),
 			},
 			declaredManagedSettings,
 			msg => this.logService.warn(`[AccountPolicy] ${msg}`)

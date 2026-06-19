@@ -27,7 +27,7 @@ export interface IManagedSettingsResponse {
 		| { readonly source: 'github'; readonly repo: string; readonly ref?: string }
 		| { readonly source: 'git'; readonly url: string; readonly ref?: string };
 	}>;
-	readonly strictKnownMarketplaces?: boolean;
+	readonly strictKnownMarketplaces?: readonly unknown[];
 	/** Any unknown keys in the response are accepted for forward compatibility. */
 	readonly [key: string]: unknown;
 }
